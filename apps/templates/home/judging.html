@@ -138,11 +138,9 @@ $(document).on('click', "#judging select", function(){
 
 
     setInterval(function(){ 
-        console.log('5 sec')
         const application_total_grades = {};
         $('.judge_app_row').each(function(index, tr) { 
             id_application = $(this).attr("data-id");
-            //console.log(id_application);
             
             if(id_application > 0)
             {
@@ -186,8 +184,6 @@ $(document).on('click', "#judging select", function(){
             return b[1] - a[1];
         });
         for (let i = 0; i < sortable.length; i++) {
-            console.log(sortable[i][0])
-            console.log(sortable[i][1])
             $('#row_'+sortable[i][0]+' [data-grade-type="position"]').val((i+1)); 
             $('#row_'+sortable[i][0]+' [data-grade-type="position"]').trigger( "click" );
         }

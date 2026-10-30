@@ -457,8 +457,6 @@
       var SelectedDate = new Date("{{ data.event_to }}");
       CurrentDate.setHours(0,0,0,0);
       SelectedDate.setHours(0,0,0,0)
-      console.log(CurrentDate);
-      console.log(SelectedDate);
       if(CurrentDate > SelectedDate){
           $( "#add_choreography" ).remove();
       }
@@ -829,8 +827,6 @@
       kategorije.forEach(function(element){
         if(element.id == category)
         { 
-          console.log(element);
-          console.log(odabrano);
           if(odabrano >= parseInt(element.min_dancers) && odabrano <= parseInt(element.max_dancers))
           {
             var checkedBoxes = getCheckedBoxes("dancers");
@@ -843,7 +839,6 @@
             //{
             //  prosjekGodina = getProsjekGodina(checkedBoxes,pocetni_datum[0].do);
             //}					
-            console.log(prosjekGodina);
             if(prosjekGodina >= minYears && prosjekGodina <= maxYears)
             {
             }

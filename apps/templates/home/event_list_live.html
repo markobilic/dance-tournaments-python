@@ -334,9 +334,7 @@
             contentType: "application/json",
             dataType: 'json',
             success: function(result) {
-                console.log(result);
                 $.each( result['applications'], function( key, applications ) {
-                    //console.log( applications );
                     id_application = applications['id'];
                     $.each( applications['judges'][0], function( key2, judges ) {
                         id_judge = key2;

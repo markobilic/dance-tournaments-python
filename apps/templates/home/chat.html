@@ -99,7 +99,6 @@
 
         //receive details from server
         socket.on('newnumber', function(msg) {
-            console.log("Received number" + msg.number);
             //maintain a list of ten numbers
             if (numbers_received.length >= 10){
                 numbers_received.shift()
