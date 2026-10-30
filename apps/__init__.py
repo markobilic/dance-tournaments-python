@@ -31,8 +31,6 @@ def configure_database(app):
     @app.before_first_request
     def initialize_database():
         try:
-            app.config['SQLALCHEMY_DATABASE_URI'] = ""
-            SQLALCHEMY_DATABASE_URI = ""
             db.create_all()
         except Exception as e:
 

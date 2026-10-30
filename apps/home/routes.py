@@ -5,7 +5,7 @@ Copyright (c) 2019 - present AppSeed.us
 
 import base64
 from apps.home import blueprint
-from flask import render_template, request, redirect, url_for, flash, jsonify, session, Markup, json
+from flask import render_template, request, redirect, url_for, flash, jsonify, session, Markup, json, abort
 from sqlalchemy import desc
 from flask_sqlalchemy import SQLAlchemy
 from sqlalchemy.orm import relationship
@@ -22,9 +22,17 @@ import os
 import json
 import operator
 
-from apps.authentication.util import hash_pass
+from apps.authentication.util import hash_pass, role_required
 
 UPLOAD_FOLDER_DANCERS = 'apps/static/assets/images/dancers/'
+
+
+def ensure_owner(record, owner_id):
+    """404 if the record does not exist, 403 if it belongs to another user (organizers may edit everything)."""
+    if record is None:
+        abort(404)
+    if current_user.role != 'organizer' and str(owner_id) != str(current_user.id):
+        abort(403)
 IMAGE_FOLDER_DANCERS = '/static/assets/images/dancers/'
 
 UPLOAD_FOLDER_EVENTS = 'apps/static/assets/images/events/'
@@ -104,7 +112,6 @@ def route_template(template):
                 activeCategorys = getEventActiveCategorys(id, id_head)
                 orderingHead    = getEventOrderingHeads(id)
 
-                print(activeCategorys)
 
                 return render_template("home/" + template, segment=segment, data=event, age_group=age_group, category = category, discipline = discipline, dancers = dancers, level = level, federation = federation, applications=applications, activeCategorys=activeCategorys, orderingHead=orderingHead)
             else:
@@ -249,7 +256,6 @@ def route_template(template):
             level       = Level.query.filter_by(active=1).all()
             federation  = Federation.query.filter_by(active=1).all()
             grades      = Grades.query.all()
-            #print(grades)
             return render_template("home/" + template, segment=segment, age_group = age_group, category = category, discipline = discipline, level = level, federation = federation, grades = grades)
         
         if template == 'invoice.html':
@@ -257,7 +263,6 @@ def route_template(template):
             if id > 0:
                 user_data       = User_data.query.filter_by(id_user=current_user.id).first()
                 invoice_data    = getInvoiceData(id)
-                print(invoice_data)
                 check_invoice = Event_invoice.query.filter_by(id_user=current_user.id, id_event = id).first()
                 if check_invoice:
                     invoice_number = check_invoice.invoice_number
@@ -266,7 +271,6 @@ def route_template(template):
                     
                     now = datetime.now()
                     invoice_number_last = Event_invoice.query.filter_by(year = now.year).order_by(desc(Event_invoice.invoice_number)).first()
-                    print(invoice_number_last)
                     if invoice_number_last:
                         event_invoice = Event_invoice(id, current_user.id, (invoice_number_last.invoice_number + 1), now.year)
                     else:
@@ -315,11 +319,12 @@ def route_template(template):
         return render_template('home/page-500.html'), 500
 
 @blueprint.route('userData', methods=['POST'])
+@login_required
 def userData():
 
-    id_user = int(request.form.get('id_user'))
+    id_user = current_user.id
     if id_user > 0:
-        user_data = User_data.query.filter_by(id_user=request.form.get('id_user')).first()
+        user_data = User_data.query.filter_by(id_user=id_user).first()
         if user_data:
             user_data.name      = request.form.get('name')
             user_data.lastname  = request.form.get('lastname')
@@ -332,12 +337,15 @@ def userData():
             db.session.commit()
         else:
             user_data = User_data(**request.form)
+            user_data.id_user = id_user
             db.session.add(user_data)
             db.session.commit()
 
     return redirect('settings.html')
 
 @blueprint.route('addDancer', methods=['POST'])
+@login_required
+@role_required('user', 'organizer')
 def addDancer():
     dancer = Dancers(**request.form)
     dancer.id_user  = current_user.id
@@ -357,6 +365,8 @@ def addDancer():
     return redirect('dancers.html')
 
 @blueprint.route('newOrderingList', methods=['POST'])
+@login_required
+@role_required('organizer')
 def newOrderingList():
     orderingList = Event_category_ordering_head(**request.form)
 
@@ -371,6 +381,8 @@ def newOrderingList():
 
 
 @blueprint.route('eventHeadLive', methods=['POST'])
+@login_required
+@role_required('organizer')
 def eventHeadLive():
 
     
@@ -406,13 +418,13 @@ def eventHeadLive():
 
 
 @blueprint.route('removeLive', methods=['POST'])
+@login_required
+@role_required('organizer')
 def removeLive():
 
     id_head         = request.form.get('id_head')
     id_event        = request.form.get('id_event')
 
-    print(id_head)
-    print(id_event)
     application = Application.query.all()
 
     if application:
@@ -429,6 +441,8 @@ def removeLive():
     return redirect('event_list_live.html?id='+id_event+'&id_head='+id_head)
 
 @blueprint.route('eventHeadLiveChoreography', methods=['POST'])
+@login_required
+@role_required('organizer')
 def eventHeadLiveChoreography():
 
     
@@ -451,9 +465,12 @@ def eventHeadLiveChoreography():
 
 
 @blueprint.route('editDancer', methods=['POST'])
+@login_required
+@role_required('user', 'organizer')
 def editDancer():
 
     dancer = Dancers.query.filter_by(id=request.form.get('id')).first()
+    ensure_owner(dancer, dancer.id_user if dancer else None)
 
     dancer.name         = request.form.get('name')
     dancer.lastname     = request.form.get('lastname')
@@ -475,18 +492,24 @@ def editDancer():
 
 
 @blueprint.route('deleteDancer',methods=['POST'])
+@login_required
+@role_required('user', 'organizer')
 def deleteDancer():
     id = request.form.get('id')
     dancer = Dancers.query.filter(Dancers.id == id).first()
+    ensure_owner(dancer, dancer.id_user if dancer else None)
     db.session.delete(dancer)
     db.session.commit()
 
     return redirect('dancers.html')
 
 @blueprint.route('deleteChoreography',methods=['POST'])
+@login_required
+@role_required('user', 'organizer')
 def deleteChoreography():
     id = request.form.get('id')
     application = Application.query.filter(Application.id == id).first()
+    ensure_owner(application, application.user_id if application else None)
     id_event = application.id_event
     db.session.delete(application)
     db.session.commit()
@@ -501,6 +524,8 @@ def deleteChoreography():
 
 
 @blueprint.route('addJudge', methods=['POST'])
+@login_required
+@role_required('organizer')
 def addJudge():
     name        = request.form['name']
     lastname    = request.form['lastname']
@@ -523,6 +548,8 @@ def addJudge():
     return redirect('judges.html')
 
 @blueprint.route('addEvent', methods=['POST'])
+@login_required
+@role_required('organizer')
 def addEvent():
 
     name            = request.form['name']
@@ -577,6 +604,8 @@ def addEvent():
     return redirect('events.html')
 
 @blueprint.route('deleteEvent',methods=['POST'])
+@login_required
+@role_required('organizer')
 def deleteEvent():
     id = request.form.get('id')
     event = Events.query.filter(Events.id == id).first()
@@ -615,6 +644,8 @@ def deleteEvent():
     return redirect('events.html')
 
 @blueprint.route('addChoreography', methods=['POST'])
+@login_required
+@role_required('user', 'organizer')
 def addChoreography():
 
     now = datetime.now()
@@ -656,10 +687,13 @@ def addChoreography():
     return redirect('event.html?id='+id_event)
     
 @blueprint.route('editChoreography', methods=['POST'])
+@login_required
+@role_required('user', 'organizer')
 def editChoreography():
 
     id_event = request.form.get('id_event')
     application = Application.query.filter_by(id=request.form.get('id')).first()
+    ensure_owner(application, application.user_id if application else None)
 
     now = datetime.now()
     application.id_event        = id_event
@@ -687,6 +721,8 @@ def editChoreography():
     return redirect('event.html?id='+id_event)
 
 @blueprint.route('editOrdering',methods=['POST'])
+@login_required
+@role_required('organizer')
 def editOrdering():
 
     id_head = request.form.get('id_head')
@@ -715,6 +751,8 @@ def editOrdering():
     return redirect('event_ordering.html?id='+id_event)
 
 @blueprint.route('addAgeGroup', methods=['POST'])
+@login_required
+@role_required('organizer')
 def addAgeGroup():
     age_group = Age_group()
 
@@ -734,6 +772,8 @@ def addAgeGroup():
     return redirect('configuration.html?tab=age_group')
 
 @blueprint.route('addCategory', methods=['POST'])
+@login_required
+@role_required('organizer')
 def addCategory():
     category = Category()
 
@@ -750,6 +790,8 @@ def addCategory():
     return redirect('configuration.html?tab=category')
 
 @blueprint.route('addDiscipline', methods=['POST'])
+@login_required
+@role_required('organizer')
 def addDiscipline():
     discipline = Discipline()
 
@@ -766,6 +808,8 @@ def addDiscipline():
     return redirect('configuration.html?tab=discipline')
 
 @blueprint.route('addLevel', methods=['POST'])
+@login_required
+@role_required('organizer')
 def addLevel():
     level = Level()
 
@@ -778,6 +822,8 @@ def addLevel():
     return redirect('configuration.html?tab=level')
 
 @blueprint.route('addGrade', methods=['POST'])
+@login_required
+@role_required('organizer')
 def addGrade():
     grades = Grades()
 
@@ -790,6 +836,8 @@ def addGrade():
     return redirect('configuration.html?tab=grades')
 
 @blueprint.route('addFederation', methods=['POST'])
+@login_required
+@role_required('organizer')
 def addFederation():
     federation = Federation()
 
@@ -802,6 +850,8 @@ def addFederation():
     return redirect('configuration.html?tab=federation')
 
 @blueprint.route('deleteFederation', methods=['POST'])
+@login_required
+@role_required('organizer')
 def deleteFederation():
     id = request.form.get('id')
     federation = Federation().query.filter(Federation.id == id).first()
@@ -812,6 +862,8 @@ def deleteFederation():
     return redirect('configuration.html')
 
 @blueprint.route('deleteLevel', methods=['POST'])
+@login_required
+@role_required('organizer')
 def deleteLevel():
     id = request.form.get('id')
     level = Level().query.filter(Level.id == id).first()
@@ -822,6 +874,8 @@ def deleteLevel():
     return redirect('configuration.html?tab=level')
 
 @blueprint.route('deleteDiscipline', methods=['POST'])
+@login_required
+@role_required('organizer')
 def deleteDiscipline():
     id = request.form.get('id')
     discipline = Discipline().query.filter(Discipline.id == id).first()
@@ -832,6 +886,8 @@ def deleteDiscipline():
     return redirect('configuration.html?tab=discipline')
 
 @blueprint.route('deleteCategory', methods=['POST'])
+@login_required
+@role_required('organizer')
 def deleteCategory():
     id = request.form.get('id')
     category = Category().query.filter(Category.id == id).first()
@@ -842,6 +898,8 @@ def deleteCategory():
     return redirect('configuration.html?tab=category')
 
 @blueprint.route('deleteAgeGroup', methods=['POST'])
+@login_required
+@role_required('organizer')
 def deleteAgeGroup():
     id = request.form.get('id')
     age_group = Age_group().query.filter(Age_group.id == id).first()
@@ -852,6 +910,8 @@ def deleteAgeGroup():
     return redirect('configuration.html?tab=age_group')
 
 @blueprint.route('judge_live', methods=['POST'])
+@login_required
+@role_required('judge')
 def judge_live():
     judge = request.get_json()
 
@@ -862,6 +922,8 @@ def judge_live():
     return json.dumps(data)
 
 @blueprint.route('judge_live_organizer', methods=['POST'])
+@login_required
+@role_required('organizer')
 def judge_live_organizer():
     head = request.get_json()
 
@@ -872,10 +934,12 @@ def judge_live_organizer():
     return json.dumps(data)
 
 @blueprint.route('judge_grade', methods=['POST'])
+@login_required
+@role_required('judge')
 def judge_grade():
     grades = request.form['grades']
 
-    id_judge = request.form['id_judge']
+    id_judge = current_user.id
     id_application = request.form['id_application']
 
     gradesObject = json.loads(grades)

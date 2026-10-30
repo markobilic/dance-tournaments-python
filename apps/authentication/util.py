@@ -6,6 +6,10 @@ Copyright (c) 2019 - present AppSeed.us
 import os
 import hashlib
 import binascii
+from functools import wraps
+
+from flask import abort
+from flask_login import current_user
 
 # Inspiration -> https://www.vitoshacademy.com/hashing-passwords-in-python/
 
@@ -32,3 +36,16 @@ def verify_pass(provided_password, stored_password):
                                   100000)
     pwdhash = binascii.hexlify(pwdhash).decode('ascii')
     return pwdhash == stored_password
+
+
+def role_required(*roles):
+    """Allow the view only for logged-in users with one of the given roles (user, organizer, judge)."""
+
+    def decorator(view):
+        @wraps(view)
+        def wrapped(*args, **kwargs):
+            if not current_user.is_authenticated or current_user.role not in roles:
+                abort(403)
+            return view(*args, **kwargs)
+        return wrapped
+    return decorator
