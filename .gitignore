@@ -31,3 +31,7 @@ apps/static/assets/node_modules
 apps/static/assets/yarn.lock
 apps/static/assets/.temp
 
+
+# local env and database copies
+.env
+*.sqlite3_backup*
